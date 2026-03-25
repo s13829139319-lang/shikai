@@ -1,0 +1,75 @@
+name: GitHub Issues 24h 监控机器人
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created, edited]
+  schedule:
+    - cron: '*/5 * * * *'
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 飞书卡片通知
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const webhook = "https://open.feishu.cn/open-apis/bot/v2/hook/06ef8079-e107-4e8d-8416-e12b45dc1461";
+            const issue = context.payload.issue;
+            if (!issue) return;
+
+            const labels = issue.labels.map(l => l.name);
+            const watchLabels = ["skill", "task", "enhancement"];
+            const hasTargetLabel = watchLabels.some(label => labels.includes(label));
+            if (!hasTargetLabel) return;
+
+            let title = "📌 新任务提醒";
+            let body = (issue.body || "").slice(0, 300);
+            
+            if (context.eventName === "issue_comment") {
+              body = (context.payload.comment.body || "").slice(0, 300);
+            }
+            
+            if (body.includes("/update")) {
+              title = "🔄 任务已更新";
+            }
+
+            const card = {
+              msg_type: "interactive",
+              card: {
+                config: { wide_screen_mode: true },
+                header: {
+                  title: {
+                    tag: "plain_text",
+                    content: title
+                  }
+                },
+                elements: [
+                  {
+                    tag: "div",
+                    text: {
+                      tag: "lark_md",
+                      content: `**${issue.title}**\n\n${body}`
+                    }
+                  },
+                  {
+                    tag: "action",
+                    actions: [
+                      {
+                        tag: "button",
+                        text: { tag: "plain_text", content: "查看 Issue" },
+                        type: "primary",
+                        url: issue.html_url
+                      }
+                    ]
+                  }
+                ]
+              }
+            };
+
+            await fetch(webhook, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(card)
+            });
